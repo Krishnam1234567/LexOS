@@ -1,0 +1,4 @@
+# Kubernetes manifests will go here
+# Organized as:
+#   base/       — Base manifests
+#   overlays/   — Environment patches (dev, staging, prod)
