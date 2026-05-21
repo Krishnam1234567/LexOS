@@ -11,31 +11,28 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-# from app.db.postgres import close_postgres
-# from app.db.neo4j import close_neo4j
-# from app.routes.health import router as health_router
-from app.routes.dashboard import router as dashboard_router
-from app.routes.digital_twin import router as digital_twin_router
-from app.routes.contracts import router as contracts_router
-from app.routes.compliance import router as compliance_router
-from app.routes.agents import router as agents_router
+from app.routes.dashboard      import router as dashboard_router
+from app.routes.digital_twin   import router as digital_twin_router
+from app.routes.contracts      import router as contracts_router
+from app.routes.compliance     import router as compliance_router
+from app.routes.agents         import router as agents_router
+from app.routes.litigation     import router as litigation_router
+from app.routes.expansion      import router as expansion_router
+from app.routes.governance     import router as governance_router
+from app.routes.analytics      import router as analytics_router
+from app.routes.knowledge_graph import router as knowledge_graph_router
+from app.routes.integrations   import router as integrations_router
+from app.routes.security       import router as security_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage startup/shutdown lifecycle."""
-    # ── Startup ───────────────────────────────
-    print(f"START {settings.APP_NAME} v{settings.APP_VERSION} starting...")
-    print(f"   PostgreSQL -> {settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}")
-    print(f"   Neo4j      -> {settings.NEO4J_URI}")
-    print(f"   ChromaDB   -> {settings.chroma_url}")
-
+    print(f"[START] {settings.APP_NAME} v{settings.APP_VERSION} starting...")
+    print(f"   Gemini AI  -> {'configured' if settings.GEMINI_API_KEY else 'NOT SET'}")
+    print(f"   API Docs   -> http://localhost:8080/docs")
     yield
-
-    # ── Shutdown ──────────────────────────────
-    print(f"STOP {settings.APP_NAME} shutting down...")
-    # await close_postgres()
-    # await close_neo4j()
+    print(f"[STOP] {settings.APP_NAME} shutting down...")
 
 
 app = FastAPI(
@@ -54,19 +51,29 @@ app = FastAPI(
 # ── CORS ──────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Vite dev + fallback
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ── Routers ───────────────────────────────────
-# app.include_router(health_router)
 app.include_router(dashboard_router)
 app.include_router(digital_twin_router)
 app.include_router(contracts_router)
 app.include_router(compliance_router)
 app.include_router(agents_router)
+app.include_router(litigation_router)
+app.include_router(expansion_router)
+app.include_router(governance_router)
+app.include_router(analytics_router)
+app.include_router(knowledge_graph_router)
+app.include_router(integrations_router)
+app.include_router(security_router)
 
 
 @app.get("/", tags=["root"])
@@ -77,4 +84,15 @@ async def root():
         "version": settings.APP_VERSION,
         "message": "Legal Digital Twin Engine — Online",
         "docs": "/docs",
+        "routes": [
+            "/dashboard", "/digital-twin", "/contracts", "/compliance",
+            "/agents", "/agents/chat", "/litigation", "/expansion",
+            "/governance", "/analytics", "/knowledge-graph",
+            "/integrations", "/security",
+        ],
     }
+
+
+@app.get("/health", tags=["root"])
+async def health():
+    return {"status": "ok", "service": settings.APP_NAME}
