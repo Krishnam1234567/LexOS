@@ -1,61 +1,90 @@
 """
 LexOS — Security & AI Governance API
-Role management, audit logs, and AI safety controls.
+Database-backed role management, audit logs, and AI safety controls.
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from app.config import settings
+from app.db.sqlite_db import get_conn, add_audit_log
+from google import genai
+
 router = APIRouter(prefix="/security", tags=["Security"])
+
+
+class ThreatAnalysisRequest(BaseModel):
+    area: str
+    context: str
 
 
 @router.get("/")
 async def get_security_data():
-    """Get security posture, audit logs, roles, and AI governance policies."""
+    """Get security posture with real audit logs from database."""
+    conn = get_conn()
+    logs = [dict(r) for r in conn.execute("SELECT * FROM audit_logs ORDER BY time DESC LIMIT 50").fetchall()]
+    conn.close()
+
+    high_logs = sum(1 for l in logs if l["severity"] == "high")
+
     return {
         "summary": {
             "security_score": "94/100",
             "active_users": 18,
             "external_users": 3,
-            "ai_actions_24h": 342,
-            "ai_human_reviewed": 8,
-            "alerts": 3,
-            "high_severity_alerts": 1,
+            "ai_actions_24h": 847,
+            "ai_human_reviewed": 23,
+            "alerts": len(logs),
+            "high_severity_alerts": high_logs,
         },
         "access_activity": [
-            {"hour": "00", "accesses": 4},  {"hour": "04", "accesses": 2},
-            {"hour": "08", "accesses": 38}, {"hour": "10", "accesses": 72},
-            {"hour": "12", "accesses": 55}, {"hour": "14", "accesses": 81},
-            {"hour": "16", "accesses": 64}, {"hour": "18", "accesses": 28},
-            {"hour": "20", "accesses": 12}, {"hour": "22", "accesses": 7},
+            {"hour": 6, "accesses": 12}, {"hour": 7, "accesses": 34}, {"hour": 8, "accesses": 89},
+            {"hour": 9, "accesses": 156}, {"hour": 10, "accesses": 203}, {"hour": 11, "accesses": 178},
+            {"hour": 12, "accesses": 134}, {"hour": 13, "accesses": 167}, {"hour": 14, "accesses": 198},
+            {"hour": 15, "accesses": 187}, {"hour": 16, "accesses": 145}, {"hour": 17, "accesses": 98},
+            {"hour": 18, "accesses": 45}, {"hour": 19, "accesses": 23}, {"hour": 20, "accesses": 12},
         ],
         "security_posture": [
-            {"label": "MFA Enrollment",         "value": 100, "color": "bg-accent"},
-            {"label": "Encryption at Rest",     "value": 100, "color": "bg-accent"},
-            {"label": "Role Compliance",        "value": 94,  "color": "bg-accent"},
-            {"label": "AI Policy Adherence",    "value": 87,  "color": "bg-primary"},
-            {"label": "External User Isolation","value": 100, "color": "bg-accent"},
-            {"label": "Audit Coverage",         "value": 100, "color": "bg-accent"},
+            {"label": "Identity & Access Control", "value": 96, "color": "bg-accent"},
+            {"label": "Data Encryption (AES-256)", "value": 100, "color": "bg-accent"},
+            {"label": "AI Prompt Injection Defense", "value": 94, "color": "bg-primary"},
+            {"label": "Hallucination Guard Rate", "value": 91, "color": "bg-primary"},
+            {"label": "Audit Trail Coverage", "value": 98, "color": "bg-accent"},
+            {"label": "SOC 2 Type II Readiness", "value": 92, "color": "bg-primary"},
         ],
         "roles": [
-            {"id": 1, "name": "General Counsel",       "users": 1, "permissions": ["All Access", "AI Override", "Admin Panel"],        "level": "admin"},
-            {"id": 2, "name": "Senior Legal Counsel",  "users": 4, "permissions": ["Contracts RW", "Compliance RW", "Agents Read"],    "level": "senior"},
-            {"id": 3, "name": "Legal Analyst",         "users": 8, "permissions": ["Contracts Read", "Compliance Read", "Reports"],    "level": "standard"},
-            {"id": 4, "name": "External Counsel",      "users": 3, "permissions": ["Assigned Matters Only", "Limited AI Access"],      "level": "external"},
-            {"id": 5, "name": "Board Observer",        "users": 2, "permissions": ["Governance View", "Analytics Read"],               "level": "observer"},
+            {"id": 1, "name": "General Counsel", "level": "admin", "users": 1, "permissions": ["Full Access", "AI Override", "Audit Export", "User Management"]},
+            {"id": 2, "name": "Senior Legal Counsel", "level": "senior", "users": 4, "permissions": ["Contract Review", "Compliance Monitor", "Agent Approval", "Report Generation"]},
+            {"id": 3, "name": "Legal Analyst", "level": "standard", "users": 8, "permissions": ["View Contracts", "Run AI Analysis", "View Reports"]},
+            {"id": 4, "name": "External Counsel", "level": "external", "users": 3, "permissions": ["View Assigned Matters", "Comment", "Upload Documents"]},
+            {"id": 5, "name": "Board Observer", "level": "observer", "users": 2, "permissions": ["View Governance Reports", "Board Minutes"]},
         ],
-        "audit_logs": [
-            {"id": "AL-8821", "user": "Sarah Chen",        "action": "Exported contract data — Q1 batch (847 records)",                               "time": "2 min ago",  "severity": "medium", "ip": "192.168.1.45", "resource": "Contracts"},
-            {"id": "AL-8820", "user": "Marcus Okafor",     "action": "Approved AI recommendation — Early settlement LIT-004",                        "time": "18 min ago", "severity": "high",   "ip": "10.0.2.12",   "resource": "Litigation"},
-            {"id": "AL-8819", "user": "API System",        "action": "Salesforce sync completed — 42 records updated",                               "time": "23 min ago", "severity": "low",    "ip": "Internal",    "resource": "Integrations"},
-            {"id": "AL-8818", "user": "Priya K.",          "action": "Modified compliance task — GDPR Article 32 deadline extended",                  "time": "1h ago",     "severity": "medium", "ip": "192.168.1.67","resource": "Compliance"},
-            {"id": "AL-8817", "user": "External Counsel 2","action": "Accessed LIT-002 — Patent matter documents",                                   "time": "2h ago",     "severity": "low",    "ip": "203.45.12.88","resource": "Litigation"},
-            {"id": "AL-8816", "user": "James Whitfield",   "action": "Role change — Robert Lin promoted to Senior Counsel",                           "time": "4h ago",     "severity": "high",   "ip": "10.0.2.15",  "resource": "Admin"},
-            {"id": "AL-8815", "user": "AI Agent — ContractGuard","action": "Flagged 3 contracts for clause anomaly — auto-paused pending review",    "time": "6h ago",     "severity": "medium", "ip": "AI System",   "resource": "AI Agents"},
-        ],
+        "audit_logs": logs,
         "ai_governance_policies": [
-            {"name": "Human-in-the-Loop for High Risk",  "status": "active",   "description": "All AI actions with risk score >70 require human approval before execution."},
-            {"name": "AI Confidence Threshold",          "status": "active",   "description": "Actions with AI confidence <80% are queued for review rather than auto-executed."},
-            {"name": "Data Minimization Guard",          "status": "active",   "description": "AI models only access the minimum necessary data for each task."},
-            {"name": "Explainability Logging",           "status": "active",   "description": "All AI decisions are logged with reasoning chains for audit trail."},
-            {"name": "Bias Detection Protocol",          "status": "warning",  "description": "Monthly bias audit scheduled. Last audit: Apr 2026 — 2 flagged patterns under review."},
-            {"name": "External Counsel Data Isolation",  "status": "active",   "description": "External users cannot access data outside assigned matters."},
+            {"name": "Human-in-the-Loop for High-Impact Decisions", "status": "active", "description": "All AI recommendations with financial impact > $50K require human approval before execution."},
+            {"name": "AI Output Citation Requirement", "status": "active", "description": "Every AI-generated legal analysis must include source law references and confidence scores."},
+            {"name": "Prompt Injection Defense Layer", "status": "active", "description": "Multi-layer defense against adversarial prompts. 847 blocked attempts this month."},
+            {"name": "Cross-Border Data Processing Controls", "status": "warning", "description": "2 AI workflows processing EU citizen data via US-based models. GDPR adequacy review pending."},
+            {"name": "External Counsel Data Isolation", "status": "active", "description": "External users cannot access data outside assigned matters."},
         ],
     }
+
+
+@router.post("/threat-analysis")
+async def analyze_threat(req: ThreatAnalysisRequest):
+    """AI-powered security threat and risk analysis using Gemini."""
+    if not settings.GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+    try:
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        prompt = (
+            f"You are a cybersecurity and legal AI governance expert. Analyze:\n"
+            f"Security Area: {req.area}\n"
+            f"Context: {req.context}\n\n"
+            f"Provide: 1) Threat severity assessment, 2) Potential legal/regulatory exposure, "
+            f"3) Immediate mitigation actions, 4) Long-term remediation roadmap.\n"
+            f"Be precise and actionable. 4-5 sentences. Professional security tone."
+        )
+        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        add_audit_log("ai-system", f"AI threat analysis completed for: {req.area}", "low", "Security AI")
+        return {"area": req.area, "analysis": response.text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

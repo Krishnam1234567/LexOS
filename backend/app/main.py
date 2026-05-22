@@ -23,6 +23,7 @@ from app.routes.analytics      import router as analytics_router
 from app.routes.knowledge_graph import router as knowledge_graph_router
 from app.routes.integrations   import router as integrations_router
 from app.routes.security       import router as security_router
+from app.routes.settings_route import router as settings_router
 
 
 @asynccontextmanager
@@ -74,6 +75,7 @@ app.include_router(analytics_router)
 app.include_router(knowledge_graph_router)
 app.include_router(integrations_router)
 app.include_router(security_router)
+app.include_router(settings_router)
 
 
 @app.get("/", tags=["root"])
