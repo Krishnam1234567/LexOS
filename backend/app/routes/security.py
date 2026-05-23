@@ -2,10 +2,15 @@
 LexOS — Security & AI Governance API
 Database-backed role management, audit logs, and AI safety controls.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime
+
 from app.config import settings
-from app.db.sqlite_db import get_conn, add_audit_log
+from app.db.session import get_db
+from app.db.models import AuditLog
 from google import genai
 
 router = APIRouter(prefix="/security", tags=["Security"])
@@ -17,11 +22,12 @@ class ThreatAnalysisRequest(BaseModel):
 
 
 @router.get("/")
-async def get_security_data():
+async def get_security_data(db: AsyncSession = Depends(get_db)):
     """Get security posture with real audit logs from database."""
-    conn = get_conn()
-    logs = [dict(r) for r in conn.execute("SELECT * FROM audit_logs ORDER BY time DESC LIMIT 50").fetchall()]
-    conn.close()
+    result = await db.execute(select(AuditLog).order_by(AuditLog.time.desc()).limit(50))
+    logs = [{"id": l.id, "user": l.user, "action": l.action, "severity": l.severity,
+             "resource": l.resource, "time": l.time, "ip": l.ip}
+            for l in result.scalars().all()]
 
     high_logs = sum(1 for l in logs if l["severity"] == "high")
 
@@ -69,7 +75,7 @@ async def get_security_data():
 
 
 @router.post("/threat-analysis")
-async def analyze_threat(req: ThreatAnalysisRequest):
+async def analyze_threat(req: ThreatAnalysisRequest, db: AsyncSession = Depends(get_db)):
     """AI-powered security threat and risk analysis using Gemini."""
     if not settings.GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
@@ -84,7 +90,9 @@ async def analyze_threat(req: ThreatAnalysisRequest):
             f"Be precise and actionable. 4-5 sentences. Professional security tone."
         )
         response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-        add_audit_log("ai-system", f"AI threat analysis completed for: {req.area}", "low", "Security AI")
+        log_id = f"LOG-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        db.add(AuditLog(id=log_id, user="ai-system", action=f"AI threat analysis completed for: {req.area}",
+                        severity="low", resource="Security AI", time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ip="192.168.1.1"))
         return {"area": req.area, "analysis": response.text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

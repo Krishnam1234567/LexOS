@@ -1,10 +1,16 @@
 """
 LexOS — Analytics & Executive Intelligence API
-Legal KPIs, spend forecasting, and executive intelligence reporting.
+Database-backed legal KPIs, spend forecasting, and executive reporting.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.config import settings
+from app.db.session import get_db
+from app.db.models import (AnalyticsKPI, LegalSpend, RiskTrendAnalytics,
+                           EfficiencyMetric, MatterCategory, SpendForecast, ExecutiveSummary)
 from google import genai
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
@@ -16,64 +22,62 @@ class ReportRequest(BaseModel):
 
 
 @router.get("/")
-async def get_analytics_data():
+async def get_analytics_data(db: AsyncSession = Depends(get_db)):
     """Get analytics, KPIs, spend trends, and executive intelligence."""
+    # KPIs
+    kpi_r = await db.execute(select(AnalyticsKPI))
+    kpis_raw = {k.key: k.value for k in kpi_r.scalars().all()}
+    kpis = {
+        "total_legal_spend": kpis_raw.get("total_legal_spend", ""),
+        "spend_change": kpis_raw.get("spend_change", ""),
+        "cost_per_matter": kpis_raw.get("cost_per_matter", ""),
+        "cost_change": kpis_raw.get("cost_change", ""),
+        "matter_cycle_time": kpis_raw.get("matter_cycle_time", ""),
+        "cycle_change": kpis_raw.get("cycle_change", ""),
+        "prevention_rate": kpis_raw.get("prevention_rate", ""),
+        "prevention_change": kpis_raw.get("prevention_change", ""),
+        "attorney_hours_saved": int(kpis_raw.get("attorney_hours_saved", 0)),
+        "ai_savings_usd": int(kpis_raw.get("ai_savings_usd", 0)),
+    }
+
+    # Legal spend
+    ls_r = await db.execute(select(LegalSpend).order_by(LegalSpend.id))
+    legal_spend = [{"month": s.month, "internal": s.internal, "external": s.external, "budget": s.budget}
+                   for s in ls_r.scalars().all()]
+
+    # Risk trends
+    rt_r = await db.execute(select(RiskTrendAnalytics).order_by(RiskTrendAnalytics.id))
+    risk_trends = [{"month": r.month, "contractRisk": r.contractRisk,
+                    "complianceRisk": r.complianceRisk, "litigationRisk": r.litigationRisk}
+                   for r in rt_r.scalars().all()]
+
+    # Efficiency
+    eff_r = await db.execute(select(EfficiencyMetric).order_by(EfficiencyMetric.id))
+    efficiency = [{"name": e.name, "aiTime": e.aiTime, "manualTime": e.manualTime}
+                  for e in eff_r.scalars().all()]
+
+    # Matters by category
+    mc_r = await db.execute(select(MatterCategory).order_by(MatterCategory.id))
+    matters = [{"name": m.name, "value": m.value, "color": m.color}
+               for m in mc_r.scalars().all()]
+
+    # Spend forecast
+    sf_r = await db.execute(select(SpendForecast).order_by(SpendForecast.id))
+    forecast = [{"month": f.month, "forecast": f.forecast, "lower": f.lower, "upper": f.upper}
+                for f in sf_r.scalars().all()]
+
+    # Executive summary
+    es_r = await db.execute(select(ExecutiveSummary))
+    exec_summary = {e.key: e.value for e in es_r.scalars().all()}
+
     return {
-        "kpis": {
-            "total_legal_spend": "$2.1M",
-            "spend_change": "+8%",
-            "cost_per_matter": "$4,820",
-            "cost_change": "-12%",
-            "matter_cycle_time": "8.3 days",
-            "cycle_change": "-22%",
-            "prevention_rate": "74%",
-            "prevention_change": "+11%",
-            "attorney_hours_saved": 847,
-            "ai_savings_usd": 212000,
-        },
-        "legal_spend": [
-            {"month": "Jan", "internal": 180, "external": 320, "budget": 520},
-            {"month": "Feb", "internal": 210, "external": 290, "budget": 520},
-            {"month": "Mar", "internal": 195, "external": 410, "budget": 600},
-            {"month": "Apr", "internal": 220, "external": 360, "budget": 580},
-            {"month": "May", "internal": 240, "external": 280, "budget": 520},
-            {"month": "Jun", "internal": 200, "external": 350, "budget": 550},
-        ],
-        "risk_trends": [
-            {"month": "Jan", "contractRisk": 62, "complianceRisk": 45, "litigationRisk": 38},
-            {"month": "Feb", "contractRisk": 58, "complianceRisk": 42, "litigationRisk": 41},
-            {"month": "Mar", "contractRisk": 71, "complianceRisk": 39, "litigationRisk": 55},
-            {"month": "Apr", "contractRisk": 65, "complianceRisk": 51, "litigationRisk": 48},
-            {"month": "May", "contractRisk": 55, "complianceRisk": 43, "litigationRisk": 52},
-            {"month": "Jun", "contractRisk": 48, "complianceRisk": 38, "litigationRisk": 44},
-        ],
-        "efficiency": [
-            {"name": "Contract Review",  "aiTime": 2.1, "manualTime": 14},
-            {"name": "Due Diligence",    "aiTime": 5.5, "manualTime": 40},
-            {"name": "Compliance Check", "aiTime": 1.2, "manualTime": 8},
-            {"name": "Risk Assessment",  "aiTime": 0.8, "manualTime": 6},
-            {"name": "NDA Analysis",     "aiTime": 0.3, "manualTime": 2.5},
-        ],
-        "matters_by_category": [
-            {"name": "Commercial",  "value": 34, "color": "#2563EB"},
-            {"name": "Employment",  "value": 22, "color": "#10B981"},
-            {"name": "IP & Tech",   "value": 18, "color": "#8B5CF6"},
-            {"name": "Regulatory",  "value": 15, "color": "#F59E0B"},
-            {"name": "Litigation",  "value": 11, "color": "#EF4444"},
-        ],
-        "spend_forecast": [
-            {"month": "Jul", "forecast": 510, "lower": 460, "upper": 560},
-            {"month": "Aug", "forecast": 530, "lower": 470, "upper": 590},
-            {"month": "Sep", "forecast": 490, "lower": 430, "upper": 550},
-            {"month": "Oct", "forecast": 540, "lower": 480, "upper": 600},
-            {"month": "Nov", "forecast": 580, "lower": 510, "upper": 650},
-            {"month": "Dec", "forecast": 620, "lower": 550, "upper": 690},
-        ],
-        "executive_summary": {
-            "ai_efficiency": "AI automation saved 847 attorney-hours this quarter, equivalent to $212K in external counsel fees. Contract review automation leads at 85% time reduction.",
-            "priority_risks": "GDPR enforcement action and Westbrook litigation are highest financial exposure at $7.6M combined. Recommend immediate senior counsel escalation.",
-            "q3_forecast": "Projected spend of $1.54M for H2 2026 within 5% of budget. Contract pipeline growth suggests 18% increase in commercial matters — proactive resourcing recommended.",
-        },
+        "kpis": kpis,
+        "legal_spend": legal_spend,
+        "risk_trends": risk_trends,
+        "efficiency": efficiency,
+        "matters_by_category": matters,
+        "spend_forecast": forecast,
+        "executive_summary": exec_summary,
     }
 
 

@@ -1,10 +1,15 @@
 """
 LexOS — Knowledge Graph API
-Legal entity relationships, dependency mapping, and graph data.
+Database-backed legal entity relationships and graph data.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.config import settings
+from app.db.session import get_db
+from app.db.models import KGSummary, KGNode, KGEdge, KGRelationship
 from google import genai
 
 router = APIRouter(prefix="/knowledge-graph", tags=["Knowledge Graph"])
@@ -16,43 +21,41 @@ class RelationshipQueryRequest(BaseModel):
 
 
 @router.get("/")
-async def get_knowledge_graph_data():
+async def get_knowledge_graph_data(db: AsyncSession = Depends(get_db)):
     """Get legal knowledge graph nodes, edges, and relationship data."""
+    # Summary
+    sum_r = await db.execute(select(KGSummary))
+    summary = {s.key: s.value for s in sum_r.scalars().all()}
+
+    # Nodes
+    node_r = await db.execute(select(KGNode))
+    nodes = [{"id": n.id, "label": n.label, "sublabel": n.sublabel, "type": n.type,
+              "x": n.x, "y": n.y, "risk": n.risk, "icon": n.icon}
+             for n in node_r.scalars().all()]
+
+    # Edges
+    edge_r = await db.execute(select(KGEdge).order_by(KGEdge.id))
+    edges = [{"from": e.source, "to": e.target, "label": e.label}
+             for e in edge_r.scalars().all()]
+
+    # Relationships
+    rel_r = await db.execute(select(KGRelationship))
+    relationships = [
+        {"id": r.id, "from": r.from_entity, "to": r.to_entity,
+         "relation": r.relation, "type": r.type, "risk": r.risk}
+        for r in rel_r.scalars().all()
+    ]
+
     return {
         "summary": {
-            "total_nodes": 247,
-            "total_relationships": 1038,
-            "high_risk_links": 18,
-            "documents_indexed": 891,
+            "total_nodes": int(summary.get("total_nodes", 0)),
+            "total_relationships": int(summary.get("total_relationships", 0)),
+            "high_risk_links": int(summary.get("high_risk_links", 0)),
+            "documents_indexed": int(summary.get("documents_indexed", 0)),
         },
-        "nodes": [
-            {"id": "n1", "label": "Master SaaS Agreement",  "sublabel": "Acme Corp",       "type": "contract",   "x": 300, "y": 100, "risk": "low",    "icon": "📄"},
-            {"id": "n2", "label": "GDPR DPA",               "sublabel": "EU Operations",    "type": "regulation", "x": 580, "y": 80,  "risk": "high",   "icon": "⚖️"},
-            {"id": "n3", "label": "IP License",             "sublabel": "Patent Pool A",    "type": "contract",   "x": 120, "y": 220, "risk": "medium", "icon": "🔗"},
-            {"id": "n4", "label": "Employment Agreement",   "sublabel": "Key Personnel",    "type": "entity",     "x": 480, "y": 250, "risk": "low",    "icon": "👥"},
-            {"id": "n5", "label": "Subsidiary",             "sublabel": "LexOS EU BV",      "type": "entity",     "x": 300, "y": 360, "risk": "medium", "icon": "🏢"},
-            {"id": "n6", "label": "SOC 2 Type II",          "sublabel": "Compliance",       "type": "compliance", "x": 140, "y": 380, "risk": "low",    "icon": "🛡️"},
-            {"id": "n7", "label": "Litigation",             "sublabel": "Westbrook Case",   "type": "litigation", "x": 550, "y": 380, "risk": "high",   "icon": "⚠️"},
-            {"id": "n8", "label": "Indemnification",        "sublabel": "Clause A-7",       "type": "clause",     "x": 420, "y": 480, "risk": "medium", "icon": "📋"},
-        ],
-        "edges": [
-            {"from": "n1", "to": "n2", "label": "governed by"},
-            {"from": "n1", "to": "n3", "label": "licenses"},
-            {"from": "n1", "to": "n4", "label": "employs"},
-            {"from": "n2", "to": "n5", "label": "applies to"},
-            {"from": "n5", "to": "n6", "label": "certified by"},
-            {"from": "n4", "to": "n7", "label": "involved in"},
-            {"from": "n7", "to": "n8", "label": "invokes"},
-            {"from": "n1", "to": "n8", "label": "contains"},
-        ],
-        "relationships": [
-            {"id": "R-001", "from": "Master SaaS Agreement (Acme Corp)",  "to": "GDPR Data Processing Agreement",    "relation": "Governed By",    "type": "regulatory",   "risk": "high"},
-            {"id": "R-002", "from": "Master SaaS Agreement (Acme Corp)",  "to": "IP License – Patent Pool A",        "relation": "Licenses",       "type": "contractual",  "risk": "medium"},
-            {"id": "R-003", "from": "GDPR DPA",                          "to": "LexOS EU BV",                       "relation": "Binds Entity",   "type": "corporate",    "risk": "high"},
-            {"id": "R-004", "from": "Employment Agreement",              "to": "Westbrook Litigation",              "relation": "Evidence In",    "type": "litigation",   "risk": "high"},
-            {"id": "R-005", "from": "Indemnification Clause A-7",        "to": "Westbrook Litigation",              "relation": "Defense Basis",  "type": "litigation",   "risk": "medium"},
-            {"id": "R-006", "from": "LexOS EU BV",                       "to": "SOC 2 Type II",                     "relation": "Certified Under","type": "compliance",   "risk": "low"},
-        ],
+        "nodes": nodes,
+        "edges": edges,
+        "relationships": relationships,
     }
 
 

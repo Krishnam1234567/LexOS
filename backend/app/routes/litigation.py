@@ -1,10 +1,16 @@
 """
 LexOS — Litigation Prediction API
-AI-powered case risk scoring, outcome prediction, and cost forecasting.
+Database-backed case risk scoring, outcome prediction, and cost forecasting.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.config import settings
+from app.db.session import get_db
+from app.db.models import (LitigationSummary, LitigationRiskFactor, CaseOutcome,
+                           CostTrend, LitigationCase)
 from google import genai
 
 router = APIRouter(prefix="/litigation", tags=["Litigation"])
@@ -16,91 +22,49 @@ class LitigationAnalysisRequest(BaseModel):
 
 
 @router.get("/")
-async def get_litigation_data():
+async def get_litigation_data(db: AsyncSession = Depends(get_db)):
     """Get litigation portfolio, risk scores, and AI recommendations."""
+    # Summary
+    sum_r = await db.execute(select(LitigationSummary))
+    summary = {s.key: s.value for s in sum_r.scalars().all()}
+
+    # Risk factors
+    rf_r = await db.execute(select(LitigationRiskFactor).order_by(LitigationRiskFactor.id))
+    risk_factors = [{"subject": r.subject, "A": r.score, "fullMark": r.fullMark}
+                    for r in rf_r.scalars().all()]
+
+    # Case outcomes
+    co_r = await db.execute(select(CaseOutcome).order_by(CaseOutcome.id))
+    case_outcomes = [{"month": c.month, "won": c.won, "settled": c.settled, "lost": c.lost}
+                     for c in co_r.scalars().all()]
+
+    # Cost trend
+    ct_r = await db.execute(select(CostTrend).order_by(CostTrend.id))
+    cost_trend = [{"month": c.month, "projected": c.projected, "actual": c.actual}
+                  for c in ct_r.scalars().all()]
+
+    # Active cases
+    cases_r = await db.execute(select(LitigationCase))
+    active_cases = [
+        {"id": c.id, "title": c.title, "type": c.type, "risk": c.risk,
+         "status": c.status, "nextHearing": c.nextHearing, "exposure": c.exposure,
+         "winProb": c.winProb, "counsel": c.counsel, "ai_recommendation": c.ai_recommendation}
+        for c in cases_r.scalars().all()
+    ]
+
     return {
         "summary": {
-            "active_cases": 14,
-            "high_risk_cases": 4,
-            "total_exposure": "$8.6M",
-            "avg_win_probability": 69,
-            "cases_resolved_ytd": 31,
-            "favorable_outcomes": 24,
+            "active_cases": int(summary.get("active_cases", 0)),
+            "high_risk_cases": int(summary.get("high_risk_cases", 0)),
+            "total_exposure": summary.get("total_exposure", ""),
+            "avg_win_probability": int(summary.get("avg_win_probability", 0)),
+            "cases_resolved_ytd": int(summary.get("cases_resolved_ytd", 0)),
+            "favorable_outcomes": int(summary.get("favorable_outcomes", 0)),
         },
-        "risk_factors": [
-            {"subject": "Contractual Breach", "A": 78, "fullMark": 100},
-            {"subject": "IP Infringement",    "A": 45, "fullMark": 100},
-            {"subject": "Employment",          "A": 32, "fullMark": 100},
-            {"subject": "Regulatory",          "A": 61, "fullMark": 100},
-            {"subject": "Data Privacy",        "A": 55, "fullMark": 100},
-            {"subject": "Antitrust",           "A": 20, "fullMark": 100},
-        ],
-        "case_outcomes": [
-            {"month": "Jan", "won": 4, "settled": 2, "lost": 1},
-            {"month": "Feb", "won": 3, "settled": 3, "lost": 0},
-            {"month": "Mar", "won": 5, "settled": 1, "lost": 2},
-            {"month": "Apr", "won": 6, "settled": 2, "lost": 1},
-            {"month": "May", "won": 4, "settled": 4, "lost": 0},
-            {"month": "Jun", "won": 7, "settled": 2, "lost": 1},
-        ],
-        "cost_trend": [
-            {"month": "Jan", "projected": 420, "actual": 390},
-            {"month": "Feb", "projected": 480, "actual": 460},
-            {"month": "Mar", "projected": 350, "actual": 380},
-            {"month": "Apr", "projected": 520, "actual": 490},
-            {"month": "May", "projected": 610, "actual": 570},
-            {"month": "Jun", "projected": 580, "actual": None},
-        ],
-        "active_cases": [
-            {
-                "id": "LIT-001",
-                "title": "Westbrook Corp vs. Nexus Technologies",
-                "type": "Contractual Breach",
-                "risk": 72,
-                "status": "In Discovery",
-                "nextHearing": "Jun 28, 2026",
-                "exposure": "$2.4M",
-                "winProb": 67,
-                "counsel": "Morrison & Foerster",
-                "ai_recommendation": "Based on precedent analysis and current discovery status, recommend pursuing early settlement negotiation. Similar cases resolved 40% faster with 23% cost reduction when settled in discovery phase. Confidence: 84%",
-            },
-            {
-                "id": "LIT-002",
-                "title": "Patent Infringement – TechVault LLC",
-                "type": "IP Dispute",
-                "risk": 45,
-                "status": "Pre-Trial",
-                "nextHearing": "Jul 12, 2026",
-                "exposure": "$850K",
-                "winProb": 82,
-                "counsel": "Wilson Sonsini",
-                "ai_recommendation": "Strong prior-art defense identified in USPTO database. Recommend filing IPR petition simultaneously with trial defense to create settlement leverage. Confidence: 88%",
-            },
-            {
-                "id": "LIT-003",
-                "title": "Ex-Employee NDA Violation",
-                "type": "Employment",
-                "risk": 31,
-                "status": "Mediation",
-                "nextHearing": "Jun 18, 2026",
-                "exposure": "$120K",
-                "winProb": 91,
-                "counsel": "Baker McKenzie",
-                "ai_recommendation": "Mediation proceeding favorably. Plaintiff's counsel has signaled willingness to settle at $40-60K. Recommend counter at $45K with confidentiality clause. Expected resolution within 30 days. Confidence: 91%",
-            },
-            {
-                "id": "LIT-004",
-                "title": "GDPR Enforcement – EU RegBody",
-                "type": "Regulatory",
-                "risk": 88,
-                "status": "Active",
-                "nextHearing": "Jun 22, 2026",
-                "exposure": "$5.2M",
-                "winProb": 38,
-                "counsel": "Linklaters",
-                "ai_recommendation": "High-risk regulatory enforcement action. Recommend immediate engagement with DPA to demonstrate remediation steps. Voluntary disclosure of corrective measures could reduce maximum fine by 30-50%. Engage EU regulatory counsel immediately. Confidence: 76%",
-            },
-        ],
+        "risk_factors": risk_factors,
+        "case_outcomes": case_outcomes,
+        "cost_trend": cost_trend,
+        "active_cases": active_cases,
     }
 
 

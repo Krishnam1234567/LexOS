@@ -11,6 +11,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.db.session import init_db, close_db, async_session_factory
+from app.db.seed import seed_database
 from app.routes.dashboard      import router as dashboard_router
 from app.routes.digital_twin   import router as digital_twin_router
 from app.routes.contracts      import router as contracts_router
@@ -32,7 +34,15 @@ async def lifespan(app: FastAPI):
     print(f"[START] {settings.APP_NAME} v{settings.APP_VERSION} starting...")
     print(f"   Gemini AI  -> {'configured' if settings.GEMINI_API_KEY else 'NOT SET'}")
     print(f"   API Docs   -> http://localhost:8080/docs")
+
+    # Initialize database and seed demo data
+    await init_db()
+    async with async_session_factory() as session:
+        await seed_database(session)
+
     yield
+
+    await close_db()
     print(f"[STOP] {settings.APP_NAME} shutting down...")
 
 

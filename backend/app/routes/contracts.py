@@ -1,14 +1,17 @@
 """
 LexOS — Contract Intelligence API
-Full CRUD with SQLite persistence and Gemini AI analysis.
+Full CRUD with SQLAlchemy ORM and Gemini AI analysis.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from app.config import settings
-from app.db.sqlite_db import get_conn, add_audit_log
-from google import genai
-import uuid
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime
 
+from app.config import settings
+from app.db.session import get_db
+from app.db.models import Contract, AuditLog
+from google import genai
 
 router = APIRouter(prefix="/contracts", tags=["Contracts"])
 
@@ -30,19 +33,26 @@ class ContractAddRequest(BaseModel):
     risk: str = "medium"
 
 
-@router.get("/")
-async def get_contracts_data():
-    """Get contract repository from database."""
-    conn = get_conn()
-    contracts = [dict(r) for r in conn.execute("SELECT * FROM contracts ORDER BY id").fetchall()]
-    conn.close()
+async def _add_audit_log(db: AsyncSession, user: str, action: str, severity: str, resource: str):
+    log_id = f"LOG-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    db.add(AuditLog(id=log_id, user=user, action=action, severity=severity,
+                    resource=resource, time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ip="192.168.1.1"))
 
-    # Compute derived stats
+
+@router.get("/")
+async def get_contracts_data(db: AsyncSession = Depends(get_db)):
+    """Get contract repository from database."""
+    result = await db.execute(select(Contract).order_by(Contract.id))
+    contracts = [
+        {"id": c.id, "name": c.name, "counterparty": c.counterparty, "type": c.type,
+         "value": c.value, "endDate": c.endDate, "status": c.status, "risk": c.risk, "analysis": c.analysis}
+        for c in result.scalars().all()
+    ]
+
     active = [c for c in contracts if c["status"] == "active"]
     high_risk = sum(1 for c in contracts if c["risk"] == "high")
     medium_risk = sum(1 for c in contracts if c["risk"] == "medium")
-    low_risk = sum(1 for c in contracts if c["risk"] == "low")
-    total_clauses = len(contracts) * 47  # simulated
+    total_clauses = len(contracts) * 47
 
     return {
         "total_contracts": len(contracts),
@@ -58,34 +68,28 @@ async def get_contracts_data():
             "lowRisk": total_clauses - high_risk * 3 - medium_risk * 8,
         },
         "ai_insights": [
-            {"title": "Indemnification Gap Detected", "description": f"Contract CTR-2024-003 contains unlimited indemnity exposure without reciprocal cap.", "severity": "destructive", "contract_id": "CTR-2024-003"},
-            {"title": "Auto-Renewal Clause Warning", "description": f"3 contracts have 30-day auto-renewal windows approaching. Review recommended.", "severity": "warning", "contract_id": "CTR-2024-001"},
-            {"title": "Favorable Terms Identified", "description": f"AWS Enterprise License has 15% below-market pricing with guaranteed SLA.", "severity": "primary", "contract_id": "CTR-2024-006"},
+            {"title": "Indemnification Gap Detected", "description": "Contract CTR-2024-003 contains unlimited indemnity exposure without reciprocal cap.", "severity": "destructive", "contract_id": "CTR-2024-003"},
+            {"title": "Auto-Renewal Clause Warning", "description": "3 contracts have 30-day auto-renewal windows approaching. Review recommended.", "severity": "warning", "contract_id": "CTR-2024-001"},
+            {"title": "Favorable Terms Identified", "description": "AWS Enterprise License has 15% below-market pricing with guaranteed SLA.", "severity": "primary", "contract_id": "CTR-2024-006"},
         ],
     }
 
 
 @router.post("/add")
-async def add_contract(req: ContractAddRequest):
+async def add_contract(req: ContractAddRequest, db: AsyncSession = Depends(get_db)):
     """Add a new contract to the database."""
-    conn = get_conn()
-    # Generate unique ID
-    count = conn.execute("SELECT COUNT(*) FROM contracts").fetchone()[0]
+    result = await db.execute(select(func.count()).select_from(Contract))
+    count = result.scalar()
     ctr_id = f"CTR-2024-{count + 1:03d}"
 
-    conn.execute(
-        "INSERT INTO contracts VALUES (?,?,?,?,?,?,?,?,?)",
-        (ctr_id, req.name, req.counterparty, req.type, req.value, req.endDate, req.status, req.risk, None)
-    )
-    conn.commit()
-    conn.close()
-
-    add_audit_log("sarah.chen@nexustech.com", f"New contract added: {req.name} ({ctr_id})", "medium", f"Contract: {ctr_id}")
+    db.add(Contract(id=ctr_id, name=req.name, counterparty=req.counterparty, type=req.type,
+                    value=req.value, endDate=req.endDate, status=req.status, risk=req.risk))
+    await _add_audit_log(db, "sarah.chen@nexustech.com", f"New contract added: {req.name} ({ctr_id})", "medium", f"Contract: {ctr_id}")
     return {"status": "created", "id": ctr_id, "name": req.name}
 
 
 @router.post("/analyze")
-async def analyze_contract(req: ContractAnalysisRequest):
+async def analyze_contract(req: ContractAnalysisRequest, db: AsyncSession = Depends(get_db)):
     """AI-powered contract analysis using Gemini. Saves result to DB."""
     if not settings.GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
@@ -104,12 +108,12 @@ async def analyze_contract(req: ContractAnalysisRequest):
         response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
 
         # Persist analysis to DB
-        conn = get_conn()
-        conn.execute("UPDATE contracts SET analysis=? WHERE id=?", (response.text, req.contract_id))
-        conn.commit()
-        conn.close()
+        result = await db.execute(select(Contract).where(Contract.id == req.contract_id))
+        contract = result.scalar_one_or_none()
+        if contract:
+            contract.analysis = response.text
 
-        add_audit_log("ai-system", f"AI analysis completed for contract {req.contract_id}", "low", f"Contract: {req.contract_id}")
+        await _add_audit_log(db, "ai-system", f"AI analysis completed for contract {req.contract_id}", "low", f"Contract: {req.contract_id}")
         return {"contract_id": req.contract_id, "analysis": response.text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
