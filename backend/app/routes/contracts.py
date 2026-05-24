@@ -10,7 +10,7 @@ from datetime import datetime
 
 from app.config import settings
 from app.db.session import get_db
-from app.db.models import Contract, AuditLog
+from app.db.models import Contract, AuditLog, KGNode, KGEdge, KGRelationship
 from google import genai
 
 router = APIRouter(prefix="/contracts", tags=["Contracts"])
@@ -84,8 +84,68 @@ async def add_contract(req: ContractAddRequest, db: AsyncSession = Depends(get_d
 
     db.add(Contract(id=ctr_id, name=req.name, counterparty=req.counterparty, type=req.type,
                     value=req.value, endDate=req.endDate, status=req.status, risk=req.risk))
+
+    # Add Knowledge Graph Node for the contract
+    contract_node_id = f"node_ctr_{ctr_id}"
+    db.add(KGNode(
+        id=contract_node_id, label=req.name, sublabel=req.type, type="contract",
+        x=0, y=0, risk=req.risk, icon="📄"
+    ))
+
+    # Check or Add Knowledge Graph Node for the counterparty
+    counterparty_id = f"node_ent_{req.counterparty.replace(' ', '_').lower()}"
+    existing_ent = await db.execute(select(KGNode).where(KGNode.id == counterparty_id))
+    if not existing_ent.scalar_one_or_none():
+        db.add(KGNode(
+            id=counterparty_id, label=req.counterparty, sublabel="Counterparty", type="entity",
+            x=0, y=0, risk="low", icon="🏢"
+        ))
+
+    # Add Edge and Relationship
+    rel_id = f"rel_{ctr_id}_{counterparty_id}"
+    db.add(KGEdge(source=counterparty_id, target=contract_node_id, label="Signed"))
+    db.add(KGRelationship(
+        id=rel_id, from_entity=req.counterparty, to_entity=req.name,
+        relation="Signed", type="contractual", risk=req.risk
+    ))
+
     await _add_audit_log(db, "sarah.chen@nexustech.com", f"New contract added: {req.name} ({ctr_id})", "medium", f"Contract: {ctr_id}")
+    await db.commit()
     return {"status": "created", "id": ctr_id, "name": req.name}
+
+@router.delete("/{contract_id}")
+async def delete_contract(contract_id: str, db: AsyncSession = Depends(get_db)):
+    """Delete a contract and its associated Knowledge Graph data."""
+    # Find contract
+    result = await db.execute(select(Contract).where(Contract.id == contract_id))
+    contract = result.scalar_one_or_none()
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+
+    # Delete contract
+    await db.delete(contract)
+
+    # Delete associated KGNode for contract
+    contract_node_id = f"node_ctr_{contract_id}"
+    node_res = await db.execute(select(KGNode).where(KGNode.id == contract_node_id))
+    contract_node = node_res.scalar_one_or_none()
+    if contract_node:
+        await db.delete(contract_node)
+
+    # Delete KGEdges involving this contract
+    edges_res = await db.execute(select(KGEdge).where((KGEdge.source == contract_node_id) | (KGEdge.target == contract_node_id)))
+    for edge in edges_res.scalars().all():
+        await db.delete(edge)
+
+    # Delete KGRelationships involving this contract
+    # Since we don't have node IDs in KGRelationship (we have names), we can delete by the exact names
+    rel_res = await db.execute(select(KGRelationship).where((KGRelationship.to_entity == contract.name) | (KGRelationship.from_entity == contract.name)))
+    for rel in rel_res.scalars().all():
+        await db.delete(rel)
+
+    await _add_audit_log(db, "sarah.chen@nexustech.com", f"Contract deleted: {contract.name} ({contract_id})", "high", f"Contract: {contract_id}")
+    await db.commit()
+    return {"status": "deleted", "id": contract_id}
 
 
 @router.post("/analyze")

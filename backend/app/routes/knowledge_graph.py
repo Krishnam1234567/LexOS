@@ -4,7 +4,7 @@ Database-backed legal entity relationships and graph data.
 """
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -23,9 +23,18 @@ class RelationshipQueryRequest(BaseModel):
 @router.get("/")
 async def get_knowledge_graph_data(db: AsyncSession = Depends(get_db)):
     """Get legal knowledge graph nodes, edges, and relationship data."""
-    # Summary
-    sum_r = await db.execute(select(KGSummary))
-    summary = {s.key: s.value for s in sum_r.scalars().all()}
+    # Summary (Dynamic)
+    node_count_res = await db.execute(select(func.count()).select_from(KGNode))
+    total_nodes = node_count_res.scalar() or 0
+
+    rel_count_res = await db.execute(select(func.count()).select_from(KGRelationship))
+    total_rels = rel_count_res.scalar() or 0
+
+    high_risk_res = await db.execute(select(func.count()).select_from(KGRelationship).where(KGRelationship.risk == "high"))
+    high_risk_links = high_risk_res.scalar() or 0
+
+    docs_res = await db.execute(select(func.count()).select_from(KGNode).where(KGNode.type == "contract"))
+    docs_indexed = docs_res.scalar() or 0
 
     # Nodes
     node_r = await db.execute(select(KGNode))
@@ -48,10 +57,10 @@ async def get_knowledge_graph_data(db: AsyncSession = Depends(get_db)):
 
     return {
         "summary": {
-            "total_nodes": int(summary.get("total_nodes", 0)),
-            "total_relationships": int(summary.get("total_relationships", 0)),
-            "high_risk_links": int(summary.get("high_risk_links", 0)),
-            "documents_indexed": int(summary.get("documents_indexed", 0)),
+            "total_nodes": total_nodes,
+            "total_relationships": total_rels,
+            "high_risk_links": high_risk_links,
+            "documents_indexed": docs_indexed,
         },
         "nodes": nodes,
         "edges": edges,

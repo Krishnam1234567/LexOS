@@ -3,12 +3,12 @@ LexOS — Dashboard API
 Database-backed enterprise dashboard overview.
 """
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.db.models import (DashboardKPI, RiskTrendData, LitigationCategory,
-                           JurisdictionExposure, UpcomingDeadline, RecentAlert)
+                           JurisdictionExposure, UpcomingDeadline, RecentAlert, Contract)
 from app.schemas.dashboard import DashboardResponse
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -20,6 +20,12 @@ async def get_dashboard_data(db: AsyncSession = Depends(get_db)):
     # KPIs
     kpi_r = await db.execute(select(DashboardKPI))
     kpis = {k.key: k.value for k in kpi_r.scalars().all()}
+
+    # Dynamic Active Contracts
+    active_contracts_res = await db.execute(select(func.count()).select_from(Contract).where(Contract.status == "active"))
+    active_contracts_count = active_contracts_res.scalar() or 0
+    kpis["active_contracts"] = f"{active_contracts_count:,}"
+    kpis["active_contracts_change"] = f"+{max(0, active_contracts_count - 1200)} this quarter"
 
     # Risk trend
     trend_r = await db.execute(select(RiskTrendData).order_by(RiskTrendData.id))
