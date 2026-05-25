@@ -10,7 +10,7 @@ from datetime import datetime
 
 from app.config import settings
 from app.db.session import get_db
-from app.db.models import Contract, AuditLog, KGNode, KGEdge, KGRelationship
+from app.db.models import Contract, AuditLog, KGNode, KGEdge, KGRelationship, RecentAlert, JurisdictionExposure, RiskTrendData
 from google import genai
 
 router = APIRouter(prefix="/contracts", tags=["Contracts"])
@@ -110,6 +110,24 @@ async def add_contract(req: ContractAddRequest, db: AsyncSession = Depends(get_d
     ))
 
     await _add_audit_log(db, "sarah.chen@nexustech.com", f"New contract added: {req.name} ({ctr_id})", "medium", f"Contract: {ctr_id}")
+    
+    # Update Dashboard Graphs dynamically
+    jur_r = await db.execute(select(JurisdictionExposure).limit(1))
+    jur = jur_r.scalar_one_or_none()
+    if jur:
+        jur.contracts += 1
+        if req.risk in ["high", "critical"]:
+            jur.risk += 1
+            
+    trend_r = await db.execute(select(RiskTrendData).order_by(RiskTrendData.id.desc()).limit(1))
+    trend = trend_r.scalar_one_or_none()
+    if trend and req.risk in ["high", "critical"]:
+        trend.risk += 2
+        trend.compliance -= 1
+        
+    alert_id = int(datetime.now().timestamp())
+    db.add(RecentAlert(id=alert_id, message=f"New {req.risk} risk contract added: {req.name}", time="Just now", severity=req.risk))
+
     await db.commit()
     return {"status": "created", "id": ctr_id, "name": req.name}
 
@@ -144,6 +162,24 @@ async def delete_contract(contract_id: str, db: AsyncSession = Depends(get_db)):
         await db.delete(rel)
 
     await _add_audit_log(db, "sarah.chen@nexustech.com", f"Contract deleted: {contract.name} ({contract_id})", "high", f"Contract: {contract_id}")
+    
+    # Update Dashboard Graphs dynamically
+    jur_r = await db.execute(select(JurisdictionExposure).limit(1))
+    jur = jur_r.scalar_one_or_none()
+    if jur and jur.contracts > 0:
+        jur.contracts -= 1
+        if contract.risk in ["high", "critical"] and jur.risk > 0:
+            jur.risk -= 1
+            
+    trend_r = await db.execute(select(RiskTrendData).order_by(RiskTrendData.id.desc()).limit(1))
+    trend = trend_r.scalar_one_or_none()
+    if trend and contract.risk in ["high", "critical"] and trend.risk > 0:
+        trend.risk -= 2
+        trend.compliance += 1
+        
+    alert_id = int(datetime.now().timestamp()) + 1
+    db.add(RecentAlert(id=alert_id, message=f"Contract deleted: {contract.name}", time="Just now", severity="medium"))
+
     await db.commit()
     return {"status": "deleted", "id": contract_id}
 
@@ -174,6 +210,11 @@ async def analyze_contract(req: ContractAnalysisRequest, db: AsyncSession = Depe
             contract.analysis = response.text
 
         await _add_audit_log(db, "ai-system", f"AI analysis completed for contract {req.contract_id}", "low", f"Contract: {req.contract_id}")
+        
+        alert_id = int(datetime.now().timestamp()) + 2
+        db.add(RecentAlert(id=alert_id, message=f"AI Analysis complete for: {req.contract_name}", time="Just now", severity="low"))
+        await db.commit()
+        
         return {"contract_id": req.contract_id, "analysis": response.text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
