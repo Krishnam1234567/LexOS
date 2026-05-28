@@ -1,12 +1,12 @@
 {
   "experimentalServices": {
     "frontend": {
-      "src": "frontend",
-      "use": "@vercel/static-build"
+      "routePrefix": "/",
+      "framework": "vite"
     },
     "backend": {
-      "src": "backend",
-      "use": "@vercel/python"
+      "routePrefix": "/api",
+      "framework": "fastapi"
     }
   }
 }
