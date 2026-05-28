@@ -1,0 +1,12 @@
+{
+  "experimentalServices": {
+    "frontend": {
+      "src": "frontend",
+      "use": "@vercel/static-build"
+    },
+    "backend": {
+      "src": "backend",
+      "use": "@vercel/python"
+    }
+  }
+}
