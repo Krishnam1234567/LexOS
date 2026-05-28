@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { Eye, EyeOff, Scale, Loader2, Shield, Zap, GitBranch } from 'lucide-react';
 
 const DEMO_USERS = [
-  { email: 'sarah.chen@nexustech.com',    password: 'lexos2026', name: 'Sarah Chen',     role: 'General Counsel',      avatar: 'SC' },
-  { email: 'marcus.okafor@nexustech.com', password: 'lexos2026', name: 'Marcus Okafor',  role: 'Senior Legal Counsel', avatar: 'MO' },
-  { email: 'admin@nexustech.com',         password: 'admin',     name: 'Admin',           role: 'System Administrator', avatar: 'AD' },
+  { email: 'sarah.chen@demo.lexos.app',    password: 'demo', name: 'Sarah Chen',     role: 'General Counsel',      avatar: 'SC' },
+  { email: 'marcus.okafor@demo.lexos.app', password: 'demo', name: 'Marcus Okafor',  role: 'Senior Legal Counsel', avatar: 'MO' },
+  { email: 'admin@demo.lexos.app',         password: 'demo', name: 'Admin',           role: 'System Administrator', avatar: 'AD' },
 ];
 
 const FEATURES = [
@@ -33,7 +33,7 @@ export function Login({ onLogin }) {
       localStorage.setItem('lexos_session', JSON.stringify(session));
       onLogin(session);
     } else {
-      setError('Invalid credentials. Try sarah.chen@nexustech.com / lexos2026');
+      setError('Invalid credentials. Try sarah.chen@demo.lexos.app / demo');
     }
     setLoading(false);
   };
@@ -130,7 +130,7 @@ export function Login({ onLogin }) {
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="sarah.chen@nexustech.com"
+                placeholder="sarah.chen@demo.lexos.app"
                 required
                 className="w-full px-3 py-2.5 bg-input-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring text-foreground placeholder:text-muted-foreground/50"
               />
@@ -168,7 +168,7 @@ export function Login({ onLogin }) {
 
           <div className="mt-6 pt-6 border-t border-border">
             <div className="p-3 bg-muted/30 rounded-lg">
-              <p className="text-xs text-muted-foreground text-center"><span className="font-medium text-foreground">Demo credentials:</span> sarah.chen@nexustech.com / lexos2026</p>
+              <p className="text-xs text-muted-foreground text-center"><span className="font-medium text-foreground">Demo credentials:</span> sarah.chen@demo.lexos.app / demo</p>
             </div>
           </div>
         </div>
