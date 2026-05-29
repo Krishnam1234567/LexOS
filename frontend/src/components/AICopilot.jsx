@@ -111,8 +111,8 @@ export function AICopilot() {
               </div>
             )}
             <div className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${msg.role === 'user'
-                ? 'bg-primary text-primary-foreground rounded-br-sm'
-                : 'bg-muted text-foreground rounded-bl-sm'
+              ? 'bg-primary text-primary-foreground rounded-br-sm'
+              : 'bg-muted text-foreground rounded-bl-sm'
               }`}>
               {msg.content}
             </div>

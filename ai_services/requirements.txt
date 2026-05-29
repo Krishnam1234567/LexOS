@@ -1,2 +1,0 @@
-# LexOS AI Services Dependencies
-# (will be populated as we build the LLM / RAG layers)
