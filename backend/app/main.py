@@ -66,6 +66,7 @@ _allowed_origins = [
     "https://krishnam1234567.github.io",
     "http://localhost:5173",
     "http://localhost:3000",
+    "https://lex-os1.vercel.app",
 ]
 # Allow overriding via env var (e.g., custom domain)
 _frontend_url = os.getenv("FRONTEND_URL")
