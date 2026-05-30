@@ -64,6 +64,7 @@ _origins = [
     "http://localhost:5173",
     "http://localhost:3000",
     "https://lex-os1-jch1ap8qf-ttjkmlm.vercel.app",
+    "https://lex-os1.vercel.app",
 ]
 # Add production frontend URL from env (e.g. your Vercel URL)
 import os
