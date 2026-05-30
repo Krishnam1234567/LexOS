@@ -59,22 +59,23 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+import os
+
 # ── CORS ──────────────────────────────────────
-_origins = [
+_allowed_origins = [
+    "https://krishnam1234567.github.io",
     "http://localhost:5173",
     "http://localhost:3000",
-    "http://127.0.0.1:5173",
 ]
-# Add production frontend URL from env (e.g. your Vercel URL)
-import os
-_frontend_url = os.environ.get("FRONTEND_URL")
+# Allow overriding via env var (e.g., custom domain)
+_frontend_url = os.getenv("FRONTEND_URL")
 if _frontend_url:
-    _origins.append(_frontend_url)
+    _allowed_origins.append(_frontend_url)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_origins,
-    allow_credentials=True,
+    allow_origins=_allowed_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

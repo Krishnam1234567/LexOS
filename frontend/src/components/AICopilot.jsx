@@ -37,7 +37,8 @@ export function AICopilot() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/agents/chat', {
+      const apiBase = import.meta.env.VITE_API_URL || '/api';
+      const response = await fetch(`${apiBase}/agents/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

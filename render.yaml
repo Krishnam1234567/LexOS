@@ -9,6 +9,6 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: FRONTEND_URL
-        sync: false
+        value: "https://krishnam1234567.github.io"
       - key: PYTHON_VERSION
         value: "3.12.0"
