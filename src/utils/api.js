@@ -1,5 +1,5 @@
-// Replace the URL below with your actual Render web service link
-const API_BASE = import.meta.env.VITE_API_URL || 'https://your-backend-app.onrender.com';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'https://lexos-kzvx.onrender.com';
 
 export const fetchFromAPI = async (endpoint) => {
   try {
