@@ -32,7 +32,14 @@ from app.routes.settings_route import router as settings_router
 async def lifespan(app: FastAPI):
     """Manage startup/shutdown lifecycle."""
     print(f"[START] {settings.APP_NAME} v{settings.APP_VERSION} starting...")
-    print(f"   Gemini AI  -> {'configured' if settings.GEMINI_API_KEY else 'NOT SET'}")
+    key_count = len(settings.api_keys)
+    print(f"   Gemini API Keys -> {key_count} configured in pool")
+    if key_count >= 4:
+        print(f"   Actor-Critic   -> ENABLED (Parallel Generation & Fact-Checking)")
+    elif key_count > 0:
+        print(f"   Actor-Critic   -> ENABLED (WARNING: < 4 keys limits parallel throughput)")
+    else:
+        print(f"   Actor-Critic   -> DISABLED (No API keys configured)")
     print(f"   API Docs   -> http://localhost:8080/docs")
 
     # Initialize database and seed demo data

@@ -32,7 +32,7 @@ const notificationDefs = [
 
 const appearanceDefs = [
   { id: 'sidebarCompact',      label: 'Sidebar Compact Mode',    desc: 'Collapse sidebar labels by default' },
-  { id: 'aiCopilotAutoOpen',   label: 'AI Copilot Auto-Open',    desc: 'Show AI chat panel on startup' },
+  { id: 'aiCopilotAutoOpen',   label: 'LexA Auto-Open',          desc: 'Show LexA chat panel on startup' },
   { id: 'denseTableView',      label: 'Dense Table View',        desc: 'Show more rows with less padding' },
   { id: 'animatedTransitions', label: 'Animated Transitions',    desc: 'Enable smooth page transitions' },
 ];

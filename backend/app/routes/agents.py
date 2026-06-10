@@ -13,6 +13,7 @@ from app.db.session import get_db
 from app.db.models import Agent, ApprovalQueueItem, RecentActivity, AuditLog, LegalEntity, ComplianceTask, ExpansionJurisdiction
 from google import genai
 from google.genai import types
+from app.actor_critic import actor_critic_pipeline, key_pool
 
 router = APIRouter(prefix="/agents", tags=["AI Agents"])
 
@@ -164,8 +165,8 @@ agent_tools = [types.Tool(function_declarations=[add_legal_entity_tool, update_e
 @router.post("/chat", response_model=ChatResponse)
 async def chat_with_agent(req: ChatRequest, db: AsyncSession = Depends(get_db)):
     """Chat with the Legal AI Copilot powered by Gemini with live database context and autonomous tool calling."""
-    if not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY == "your_gemini_api_key_here":
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY is not configured in backend/.env")
+    if not key_pool:
+        raise HTTPException(status_code=500, detail="API Key pool is empty. Please configure GEMINI_API_KEY in backend/.env")
 
     try:
         from app.db.models import Contract, LitigationCase
@@ -189,14 +190,18 @@ async def chat_with_agent(req: ChatRequest, db: AsyncSession = Depends(get_db)):
 
         client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
-        system_instruction = (
-            "You are LexOS, an Enterprise AI Legal Operating System. You have direct access to the live corporate legal database.\n"
-            "Here is the active real-time context of the enterprise from the database:\n\n"
+        context_str = (
             f"1. Active Subsidiaries & Entities: {entities_str}\n"
             f"2. Core Contracts in Repository: {contracts_str}\n"
             f"3. Active Compliance Checklist: {tasks_str}\n"
             f"4. Litigations Monitored: {cases_str}\n"
-            f"5. Running AI Agents: {agents_str}\n\n"
+            f"5. Running AI Agents: {agents_str}"
+        )
+
+        system_instruction = (
+            "You are LexOS, an Enterprise AI Legal Operating System. You have direct access to the live corporate legal database.\n"
+            "Here is the active real-time context of the enterprise from the database:\n\n"
+            f"{context_str}\n\n"
             "CRITICAL RULES FOR TOOL CALLING:\n"
             "1. You MUST ONLY use tools if the user EXPLICITLY requests an action (e.g., 'add an entity', 'create a task') in their LATEST message.\n"
             "2. NEVER use tools if the user asks a vague question (e.g., 'where', 'why', '??').\n"
@@ -204,23 +209,26 @@ async def chat_with_agent(req: ChatRequest, db: AsyncSession = Depends(get_db)):
             "4. Be precise, professional, and concise."
         )
 
-        # Build Gemini Chat History format
-        history = [types.Content(role="user", parts=[types.Part.from_text(text=f"[System Instruction]: {system_instruction}")])]
+        # Build History format
+        history = []
         for msg in (req.history or []):
             role = "user" if msg.role == "user" else "model"
             history.append(types.Content(role=role, parts=[types.Part.from_text(text=msg.content)]))
             
-        history.append(types.Content(role="user", parts=[types.Part.from_text(text=req.message)]))
-
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=history,
-            config=types.GenerateContentConfig(tools=agent_tools, temperature=0.0)
+        # Run Actor-Critic Pipeline
+        response, retry_feedback = await actor_critic_pipeline(
+            system_instruction, context_str, history, req.message, agent_tools
         )
 
         if response.function_calls:
             # We must execute the function calls deterministically
-            history.append(response.candidates[0].content) # Append model's tool calls
+            # Execute tool calls
+            history_for_second_call = [
+                types.Content(role="user", parts=[types.Part.from_text(text=f"[System Instruction]: {system_instruction}")])
+            ] + history + [
+                types.Content(role="user", parts=[types.Part.from_text(text=req.message)])
+            ]
+            history_for_second_call.append(response.candidates[0].content)
             
             for call in response.function_calls:
                 args = call.args
@@ -255,16 +263,14 @@ async def chat_with_agent(req: ChatRequest, db: AsyncSession = Depends(get_db)):
                     name=call.name,
                     response={"result": result_msg}
                 )
-                history.append(types.Content(parts=[func_resp]))
+                history_for_second_call.append(types.Content(parts=[func_resp]))
             
             await db.commit() # Commit changes to SQLite
             
-            # Request final natural language answer
-            final_response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=history,
-                config=types.GenerateContentConfig(tools=agent_tools, temperature=0.0)
-            )
+            from app.actor_critic import generate_with_key
+            # Request final natural language answer via key pool (post-tool)
+            config = types.GenerateContentConfig(tools=agent_tools, temperature=0.0)
+            final_response, used_key = await generate_with_key(history_for_second_call, config)
             return {"response": final_response.text}
 
         return {"response": response.text}

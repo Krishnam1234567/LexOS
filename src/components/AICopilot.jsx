@@ -1,4 +1,4 @@
-import { Sparkles, Send, X } from 'lucide-react';
+import { Sparkles, Send, X, Bot, User } from 'lucide-react';
 import { useState } from 'react';
 
 export function AICopilot() {
@@ -40,8 +40,17 @@ export function AICopilot() {
     <div className="w-96 h-full bg-card border-l border-border flex flex-col">
       <div className="p-4 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-primary" />
-          <h3 className="font-semibold text-foreground">AI Legal Copilot</h3>
+          <div className="relative">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-chart-5 flex items-center justify-center shadow-md"
+                 style={{ boxShadow: '0 0 12px rgba(37, 99, 235, 0.4)' }}>
+              <Bot className="w-4 h-4 text-white" />
+            </div>
+            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-accent rounded-full border-2 border-card"></span>
+          </div>
+          <div>
+            <h3 className="font-semibold text-foreground text-sm leading-tight">AI Legal Copilot</h3>
+            <span className="text-xs text-accent font-medium">Online</span>
+          </div>
         </div>
         <button
           onClick={() => setIsOpen(false)}
@@ -55,13 +64,27 @@ export function AICopilot() {
         {messages.map((msg, idx) => (
           <div
             key={idx}
-            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            className={`flex items-end gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
           >
+            {/* Avatar */}
+            <div className="flex-shrink-0">
+              {msg.role === 'assistant' ? (
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary to-chart-5 flex items-center justify-center shadow-sm"
+                     style={{ boxShadow: '0 0 8px rgba(37, 99, 235, 0.3)' }}>
+                  <Bot className="w-3.5 h-3.5 text-white" />
+                </div>
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-secondary to-muted-foreground flex items-center justify-center shadow-sm">
+                  <User className="w-3.5 h-3.5 text-white" />
+                </div>
+              )}
+            </div>
+            {/* Message bubble */}
             <div
-              className={`max-w-[80%] rounded-lg p-3 text-sm ${
+              className={`max-w-[75%] rounded-2xl p-3 text-sm ${
                 msg.role === 'user'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-foreground'
+                  ? 'bg-primary text-primary-foreground rounded-br-sm'
+                  : 'bg-muted text-foreground rounded-bl-sm'
               }`}
             >
               {msg.content}

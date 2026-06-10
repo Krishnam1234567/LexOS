@@ -94,7 +94,7 @@ export default function App() {
           {renderScreen()}
         </div>
       </div>
-      <AICopilot />
+      <AICopilot session={session} />
     </div>
   );
 }
