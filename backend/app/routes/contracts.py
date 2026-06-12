@@ -33,6 +33,17 @@ class ContractAddRequest(BaseModel):
     risk: str = "medium"
 
 
+def _parse_value(val: str) -> int:
+    """Safely parse a contract value string like '$1,200,000' or '100000' to int.
+    Returns 0 for unparseable values."""
+    if not val:
+        return 0
+    try:
+        return int(val.replace('$', '').replace(',', '').strip())
+    except (ValueError, AttributeError):
+        return 0
+
+
 async def _add_audit_log(db: AsyncSession, user: str, action: str, severity: str, resource: str):
     log_id = f"LOG-{datetime.now().strftime('%Y%m%d%H%M%S')}"
     db.add(AuditLog(id=log_id, user=user, action=action, severity=severity,
@@ -57,7 +68,7 @@ async def get_contracts_data(db: AsyncSession = Depends(get_db)):
     return {
         "total_contracts": len(contracts),
         "total_contracts_change": f"+{len(contracts) - 3} this quarter",
-        "total_value": f"${sum(int(c['value'].replace('$','').replace(',','')) for c in contracts if c['value'] != '$0'):,}",
+        "total_value": f"${sum(_parse_value(c['value']) for c in contracts):,}",
         "expiring_soon": sum(1 for c in contracts if c["endDate"] < "2027-01-01"),
         "ai_reviewed_percentage": f"{min(98, 85 + len(contracts))}%",
         "contracts": contracts,
