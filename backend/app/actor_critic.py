@@ -50,6 +50,11 @@ async def generate_with_key(contents: List[types.Content], config: types.Generat
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
                 print(f"[KeyPool] Key ...{api_key[-4:]} exhausted quota. Auto-rotating to next key...")
                 continue
+            if "503" in error_str or "UNAVAILABLE" in error_str:
+                wait = min(2 ** attempt, 8)  # 1s, 2s, 4s, 8s, 8s
+                print(f"[KeyPool] 503 UNAVAILABLE on key ...{api_key[-4:]}. Retrying in {wait}s (attempt {attempt+1}/{max_retries})...")
+                await asyncio.sleep(wait)
+                continue
             raise # If it's another error, raise immediately
             
     # If all retries exhausted

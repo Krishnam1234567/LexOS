@@ -20,7 +20,7 @@ class ExpansionAnalysisRequest(BaseModel):
     business_description: str
 
 
-@router.get("/")
+@router.get("")
 async def get_expansion_data(db: AsyncSession = Depends(get_db)):
     """Get global expansion simulator with jurisdiction readiness data."""
     jur_r = await db.execute(select(ExpansionJurisdiction))

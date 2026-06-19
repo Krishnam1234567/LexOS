@@ -21,7 +21,7 @@ class ReportRequest(BaseModel):
     focus_area: str
 
 
-@router.get("/")
+@router.get("")
 async def get_analytics_data(db: AsyncSession = Depends(get_db)):
     """Get analytics, KPIs, spend trends, and executive intelligence."""
     # KPIs

@@ -50,7 +50,7 @@ async def _add_audit_log(db: AsyncSession, user: str, action: str, severity: str
                     resource=resource, time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ip="192.168.1.1"))
 
 
-@router.get("/")
+@router.get("")
 async def get_contracts_data(db: AsyncSession = Depends(get_db)):
     """Get contract repository from database."""
     result = await db.execute(select(Contract).order_by(Contract.id))

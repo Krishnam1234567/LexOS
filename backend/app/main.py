@@ -7,10 +7,11 @@ Main FastAPI application entry point.
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.auth import verify_google_token
 from app.db.session import init_db, close_db, async_session_factory
 from app.db.seed import seed_database
 from app.routes.dashboard      import router as dashboard_router
@@ -83,25 +84,26 @@ if _frontend_url:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
-    allow_credentials=False,
+    allow_credentials=True, # Need credentials=True for Authorization header if custom headers are an issue, but usually not strictly needed if allow_headers=["*"]
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ── Routers ───────────────────────────────────
-app.include_router(dashboard_router)
-app.include_router(digital_twin_router)
-app.include_router(contracts_router)
-app.include_router(compliance_router)
-app.include_router(agents_router)
-app.include_router(litigation_router)
-app.include_router(expansion_router)
-app.include_router(governance_router)
-app.include_router(analytics_router)
-app.include_router(knowledge_graph_router)
-app.include_router(integrations_router)
-app.include_router(security_router)
-app.include_router(settings_router)
+auth_dep = [Depends(verify_google_token)]
+app.include_router(dashboard_router, dependencies=auth_dep)
+app.include_router(digital_twin_router, dependencies=auth_dep)
+app.include_router(contracts_router, dependencies=auth_dep)
+app.include_router(compliance_router, dependencies=auth_dep)
+app.include_router(agents_router, dependencies=auth_dep)
+app.include_router(litigation_router, dependencies=auth_dep)
+app.include_router(expansion_router, dependencies=auth_dep)
+app.include_router(governance_router, dependencies=auth_dep)
+app.include_router(analytics_router, dependencies=auth_dep)
+app.include_router(knowledge_graph_router, dependencies=auth_dep)
+app.include_router(integrations_router, dependencies=auth_dep)
+app.include_router(security_router, dependencies=auth_dep)
+app.include_router(settings_router, dependencies=auth_dep)
 
 
 @app.get("/", tags=["root"])

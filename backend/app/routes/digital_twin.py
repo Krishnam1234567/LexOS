@@ -13,7 +13,7 @@ from app.schemas.digital_twin import DigitalTwinResponse
 router = APIRouter(prefix="/digital-twin", tags=["Legal Digital Twin"])
 
 
-@router.get("/", response_model=DigitalTwinResponse)
+@router.get("", response_model=DigitalTwinResponse)
 async def get_digital_twin_data(db: AsyncSession = Depends(get_db)):
     """Get legal digital twin entity and director data from database."""
     # Summary

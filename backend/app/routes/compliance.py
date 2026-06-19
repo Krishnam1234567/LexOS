@@ -34,7 +34,7 @@ async def _add_audit_log(db: AsyncSession, user: str, action: str, severity: str
                     resource=resource, time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ip="192.168.1.1"))
 
 
-@router.get("/")
+@router.get("")
 async def get_compliance_data(db: AsyncSession = Depends(get_db)):
     """Get compliance data from database."""
     scores_r = await db.execute(select(ComplianceScore))

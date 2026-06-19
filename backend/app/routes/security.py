@@ -21,7 +21,7 @@ class ThreatAnalysisRequest(BaseModel):
     context: str
 
 
-@router.get("/")
+@router.get("")
 async def get_security_data(db: AsyncSession = Depends(get_db)):
     """Get security posture with real audit logs from database."""
     result = await db.execute(select(AuditLog).order_by(AuditLog.time.desc()).limit(50))

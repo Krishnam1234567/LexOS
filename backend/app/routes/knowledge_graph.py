@@ -20,7 +20,7 @@ class RelationshipQueryRequest(BaseModel):
     context: str
 
 
-@router.get("/")
+@router.get("")
 async def get_knowledge_graph_data(db: AsyncSession = Depends(get_db)):
     """Get legal knowledge graph nodes, edges, and relationship data."""
     # Summary (Dynamic)

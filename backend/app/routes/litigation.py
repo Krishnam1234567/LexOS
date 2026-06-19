@@ -21,7 +21,7 @@ class LitigationAnalysisRequest(BaseModel):
     description: str
 
 
-@router.get("/")
+@router.get("")
 async def get_litigation_data(db: AsyncSession = Depends(get_db)):
     """Get litigation portfolio, risk scores, and AI recommendations."""
     # Summary

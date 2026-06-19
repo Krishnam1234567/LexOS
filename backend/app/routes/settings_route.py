@@ -20,7 +20,7 @@ class SettingsSaveRequest(BaseModel):
     data: dict[str, Any]
 
 
-@router.get("/")
+@router.get("")
 async def get_settings(db: AsyncSession = Depends(get_db)):
     """Get all settings from database."""
     result = await db.execute(select(Setting))

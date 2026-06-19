@@ -14,7 +14,7 @@ from app.schemas.dashboard import DashboardResponse
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 
-@router.get("/", response_model=DashboardResponse)
+@router.get("", response_model=DashboardResponse)
 async def get_dashboard_data(db: AsyncSession = Depends(get_db)):
     """Get enterprise dashboard overview data from database."""
     # KPIs

@@ -12,7 +12,7 @@ from app.db.models import IntegrationSummary, Integration, IntegrationActivity
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
 
 
-@router.get("/")
+@router.get("")
 async def get_integrations_data(db: AsyncSession = Depends(get_db)):
     """Get enterprise integration status and sync activity."""
     # Summary

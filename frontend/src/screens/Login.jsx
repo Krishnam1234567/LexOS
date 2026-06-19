@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Eye, EyeOff, Scale, Loader2, Shield, Zap, GitBranch } from 'lucide-react';
+import { GoogleLogin } from '@react-oauth/google';
+import { jwtDecode } from 'jwt-decode';
 
 const DEMO_USERS = [
   { email: 'sarah.chen@demo.lexos.app',    password: 'demo', name: 'Sarah Chen',     role: 'General Counsel',      avatar: 'SC' },
@@ -21,26 +23,30 @@ export function Login({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
+  const handleGoogleSuccess = async (credentialResponse) => {
     setError('');
     setLoading(true);
-    await new Promise(r => setTimeout(r, 900)); // UX delay
-
-    const user = DEMO_USERS.find(u => u.email === email && u.password === password);
-    if (user) {
-      const session = { ...user, loginAt: Date.now() };
+    try {
+      const decoded = jwtDecode(credentialResponse.credential);
+      const session = {
+        email: decoded.email,
+        name: decoded.name,
+        picture: decoded.picture,
+        token: credentialResponse.credential, // Save the token for API calls
+        role: 'Authenticated User',
+        avatar: decoded.name ? decoded.name.substring(0, 2).toUpperCase() : 'U',
+        loginAt: Date.now()
+      };
       localStorage.setItem('lexos_session', JSON.stringify(session));
       onLogin(session);
-    } else {
-      setError('Invalid credentials. Try sarah.chen@demo.lexos.app / demo');
+    } catch (err) {
+      setError('Failed to parse Google login response.');
     }
     setLoading(false);
   };
 
-  const quickLogin = (user) => {
-    setEmail(user.email);
-    setPass(user.password);
+  const handleGoogleError = () => {
+    setError('Google Sign-In failed. Please try again.');
   };
 
   return (
@@ -109,66 +115,38 @@ export function Login({ onLogin }) {
             <p className="text-sm text-muted-foreground">Sign in to your LexOS workspace</p>
           </div>
 
-          {/* Quick login */}
-          <div className="mb-6">
-            <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wider">Quick demo access</p>
-            <div className="flex gap-2">
-              {DEMO_USERS.map(u => (
-                <button key={u.email} onClick={() => quickLogin(u)}
-                  className="flex-1 flex flex-col items-center gap-1 p-2 bg-card border border-border rounded-lg hover:border-primary/50 hover:bg-primary/5 transition-all text-center">
-                  <div className="w-7 h-7 bg-primary/20 text-primary rounded-full flex items-center justify-center text-xs font-bold">{u.avatar}</div>
-                  <span className="text-xs text-muted-foreground leading-tight">{u.role.split(' ')[0]}<br/>{u.role.split(' ').slice(1).join(' ')}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-1.5">Email Address</label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="sarah.chen@demo.lexos.app"
-                required
-                className="w-full px-3 py-2.5 bg-input-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring text-foreground placeholder:text-muted-foreground/50"
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-full flex justify-center">
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={handleGoogleError}
+                useOneTap
+                theme="outline"
+                size="large"
               />
             </div>
-
-            <div>
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-1.5">Password</label>
-              <div className="relative">
-                <input
-                  type={showPass ? 'text' : 'password'}
-                  value={password}
-                  onChange={e => setPass(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  className="w-full px-3 py-2.5 bg-input-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring text-foreground placeholder:text-muted-foreground/50 pr-10"
-                />
-                <button type="button" onClick={() => setShow(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                  {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
+            
             {error && (
-              <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                <p className="text-xs text-destructive">{error}</p>
+              <div className="w-full p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                <p className="text-xs text-destructive text-center">{error}</p>
               </div>
             )}
-
-            <button type="submit" disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-60 text-sm">
-              {loading ? <><Loader2 className="w-4 h-4 animate-spin" />Signing in...</> : 'Sign In to LexOS'}
-            </button>
-          </form>
-
-          <div className="mt-6 pt-6 border-t border-border">
-            <div className="p-3 bg-muted/30 rounded-lg">
-              <p className="text-xs text-muted-foreground text-center"><span className="font-medium text-foreground">Demo credentials:</span> sarah.chen@demo.lexos.app / demo</p>
+            
+            <div className="w-full mt-6 border-t border-border pt-6">
+              <p className="text-xs text-muted-foreground mb-3 font-medium uppercase tracking-wider text-center">Or continue with demo account</p>
+              <div className="flex gap-2">
+                {DEMO_USERS.map(u => (
+                  <button key={u.email} onClick={() => {
+                    const session = { ...u, token: 'mock_token', loginAt: Date.now() };
+                    localStorage.setItem('lexos_session', JSON.stringify(session));
+                    onLogin(session);
+                  }}
+                    className="flex-1 flex flex-col items-center gap-1 p-2 bg-card border border-border rounded-lg hover:border-primary/50 hover:bg-primary/5 transition-all text-center">
+                    <div className="w-7 h-7 bg-primary/20 text-primary rounded-full flex items-center justify-center text-xs font-bold">{u.avatar}</div>
+                    <span className="text-xs text-muted-foreground leading-tight">{u.role.split(' ')[0]}<br/>{u.role.split(' ').slice(1).join(' ')}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>

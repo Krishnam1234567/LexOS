@@ -331,10 +331,18 @@ export function AICopilot({ session }) {
       const data = await response.json();
       setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
     } catch (error) {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `⚠️ Backend not connected. Start the backend server to enable AI responses.\n\n${error.message}`,
-      }]);
+      let errorMsg;
+      const msg = error.message || '';
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('ERR_CONNECTION')) {
+        errorMsg = `⚠️ Backend not connected. Start the backend server to enable AI responses.`;
+      } else if (msg.includes('503') || msg.includes('UNAVAILABLE')) {
+        errorMsg = `⏳ The AI model is temporarily overloaded. Please try again in a few seconds.\n\n${msg}`;
+      } else if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
+        errorMsg = `⏳ Rate limit reached. The system is rotating API keys — please retry shortly.\n\n${msg}`;
+      } else {
+        errorMsg = `⚠️ Something went wrong.\n\n${msg}`;
+      }
+      setMessages(prev => [...prev, { role: 'assistant', content: errorMsg }]);
     } finally {
       setIsLoading(false);
     }

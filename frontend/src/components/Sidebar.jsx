@@ -14,7 +14,7 @@ import {
   Settings
 } from 'lucide-react';
 
-export function Sidebar({ activeScreen, onNavigate }) {
+export function Sidebar({ activeScreen, onNavigate, role = 'Authenticated User' }) {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'digital-twin', label: 'Legal Digital Twin', icon: Network },
@@ -31,6 +31,25 @@ export function Sidebar({ activeScreen, onNavigate }) {
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
+  const getVisibleItems = () => {
+    if (role === 'System Administrator') {
+      return navItems; // Sees everything
+    }
+    if (role === 'General Counsel') {
+      const allowed = ['dashboard', 'digital-twin', 'contracts', 'compliance', 'litigation', 'expansion', 'governance', 'analytics', 'agents', 'knowledge'];
+      return navItems.filter(item => allowed.includes(item.id));
+    }
+    if (role === 'Senior Legal Counsel') {
+      const allowed = ['dashboard', 'contracts', 'litigation', 'compliance', 'agents', 'knowledge'];
+      return navItems.filter(item => allowed.includes(item.id));
+    }
+    // Default fallback for generic Google Auth users
+    const allowed = ['dashboard', 'contracts', 'compliance', 'agents', 'knowledge'];
+    return navItems.filter(item => allowed.includes(item.id));
+  };
+
+  const visibleNavItems = getVisibleItems();
+
   return (
     <div className="w-64 h-full bg-sidebar border-r border-sidebar-border flex flex-col">
       <div className="p-6 border-b border-sidebar-border">
@@ -39,7 +58,7 @@ export function Sidebar({ activeScreen, onNavigate }) {
       </div>
 
       <nav className="flex-1 overflow-y-auto p-3">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeScreen === item.id;
 

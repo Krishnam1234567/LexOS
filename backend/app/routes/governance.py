@@ -22,7 +22,7 @@ class ResolutionDraftRequest(BaseModel):
     context: str
 
 
-@router.get("/")
+@router.get("")
 async def get_governance_data(db: AsyncSession = Depends(get_db)):
     """Get governance data from database."""
     # Summary

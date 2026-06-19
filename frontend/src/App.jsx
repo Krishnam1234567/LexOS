@@ -82,7 +82,7 @@ export default function App() {
 
   return (
     <div className="w-full h-screen flex bg-background overflow-hidden">
-      <Sidebar activeScreen={activeScreen} onNavigate={setActiveScreen} />
+      <Sidebar activeScreen={activeScreen} onNavigate={setActiveScreen} role={session?.role} />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header
           onThemeToggle={() => setIsDarkMode(!isDarkMode)}
